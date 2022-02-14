@@ -18,9 +18,31 @@ func init() {
 	// Register element types and DoFns.
 	beam.RegisterType(reflect.TypeOf((*stringPair)(nil)).Elem())
 	beam.RegisterFunction(SelectNumbers)
-	beam.RegisterFunction(splitStringPair)
+	beam.RegisterFunction(SplitStringPair)
 	beam.RegisterFunction(formatCoGBKResults)
 }
+
+var emailSlice = []stringPair{
+	{"amy", "amy@example.com"},
+	{"carl", "carl@example.com"},
+	{"julia", "julia@example.com"},
+	{"Carlos", "carlos@email.com"},
+	{"Gustavo", "gustavo@email.com"},
+}
+
+var phoneSlice = []stringPair{
+	{"amy", "111-222-3333"},
+	{"james", "222-333-4444"},
+	{"amy", "333-444-5555"},
+	{"Carlos", "444-555-6666"},
+	{"Gustavo", "555-666-7777"},
+}
+
+/* CoGroupByKey Aggregates all input elements by their key and allows downstream processing
+to consume all values associated with the key. While GroupByKey performs this operation over
+a single input collection and thus a single type of input values, CoGroupByKey operates over
+multiple input collections. As a result, the result for each key is a tuple of the values
+associated with that key in each input collection. */
 
 func main() {
 
@@ -39,54 +61,31 @@ func main() {
 	/* Take each element of the input PCollection and branch the odd and even elements */
 
 	// [START cogroupbykey_inputs]
-	var emailSlice = []stringPair{
-		{"amy", "amy@example.com"},
-		{"carl", "carl@example.com"},
-		{"julia", "julia@example.com"},
-		{"carl", "carl@email.com"},
-		{"Gustavo", "gustavo@email.com"},
-	}
 
-	var phoneSlice = []stringPair{
-		{"amy", "111-222-3333"},
-		{"james", "222-333-4444"},
-		{"amy", "333-444-5555"},
-		{"carl", "444-555-6666"},
-		{"Gustavo", "555-666-7777"},
-	}
 	emails := CreateAndSplit(scope.Scope("CreateEmails"), emailSlice)
-	// beam.ParDo0(scope, func(numbers []stringPair) {
-	// 	fmt.Println(numbers)
-	// }, emails)
-
-	// func CreateAndSplit(s beam.Scope, input []stringPair) beam.PCollection {
-	// 	initial := beam.CreateList(s, input)
-	// 	return beam.ParDo(s, splitStringPair, initial)
-	// }
-
-	initial := beam.CreateList(scope.Scope("CreateEmails"), emailSlice)
-	beam.ParDo0(scope, func(numbers stringPair) {
-		fmt.Println(numbers)
-	}, initial)
-
-	test := beam.ParDo(scope.Scope("CreateEmails"), splitStringPair, initial)
 	beam.ParDo0(scope, func(numbers string, value string) {
 		fmt.Println(numbers, value)
-	}, test)
+	}, emails)
+
+	// initial := beam.CreateList(scope.Scope("CreateEmails"), emailSlice)
+	// beam.ParDo0(scope, func(numbers stringPair) {
+	// 	fmt.Println(numbers)
+	// }, initial)
+
+	// test := beam.ParDo(scope.Scope("CreateEmails"), splitStringPair, initial)
+	// beam.ParDo0(scope, func(numbers string, value string) {
+	// 	fmt.Println(numbers, value)
+	// }, test)
 
 	phones := CreateAndSplit(scope.Scope("CreatePhones"), phoneSlice)
-	// [END cogroupbykey_inputs]
-
 	// [START cogroupbykey_outputs]
 	results := beam.CoGroupByKey(scope, emails, phones)
 
 	contactLines := beam.ParDo(scope, formatCoGBKResults, results)
 
-	// [END cogroupbykey_outputs]
-
 	// Print the PCollection
 	beam.ParDo0(scope, func(numbers string) {
-		fmt.Println(numbers)
+		fmt.Println("contact", numbers)
 	}, contactLines)
 
 	// "Run" invokes beam.Run with the runner supplied by the flag "runner".
@@ -108,24 +107,20 @@ func SelectNumbers(numbers []int, emit_odd, emit_even func([]int)) {
 	emit_even(even)
 }
 
-/* CoGroupByKey Aggregates all input elements by their key and allows downstream processing
-to consume all values associated with the key. While GroupByKey performs this operation over
-a single input collection and thus a single type of input values, CoGroupByKey operates over
-multiple input collections. As a result, the result for each key is a tuple of the values
-associated with that key in each input collection. */
-
 type stringPair struct {
 	Key, Value string
 }
 
-func splitStringPair(e stringPair) (string, string) {
-	return e.Key, e.Value
+// SplitStringPair is a helper function that splits a stringPair in a K,V structure
+func SplitStringPair(p stringPair) (string, string) {
+	return p.Key, p.Value
 }
 
-// CreateAndSplit is a helper function that creates
+/* CreateAndSplit is a helper function that creates a PCollection in a
+   K,V structure using the SplitStringPair function                    */
 func CreateAndSplit(s beam.Scope, input []stringPair) beam.PCollection {
 	initial := beam.CreateList(s, input)
-	return beam.ParDo(s, splitStringPair, initial)
+	return beam.ParDo(s, SplitStringPair, initial)
 }
 
 func formatCoGBKResults(key string, emailIter, phoneIter func(*string) bool) string {
