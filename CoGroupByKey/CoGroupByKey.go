@@ -69,6 +69,7 @@ func formatCoGBKResults(key string, emailIter, phoneIter func(*string) bool) str
 	return fmt.Sprintf("%s; %s; %s", key, formatStringIter(emails), formatStringIter(phones))
 }
 
+// Output helper
 func formatStringIter(vs []string) string {
 	var b strings.Builder
 	b.WriteRune('[')
